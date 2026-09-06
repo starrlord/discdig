@@ -43,11 +43,15 @@ jobs:
         shell: pwsh
         run: |
           $v = (Select-String -Path discdig/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $pv = (Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
           $tag = "${{ github.ref_name }}".TrimStart('v')
-          if ($v -ne $tag) {
-            throw "tag $tag does not match __version__ $v - bump discdig/__init__.py first"
+          if ($v -ne $pv) {
+            throw "discdig/__init__.py says $v but pyproject.toml says $pv - bump both"
           }
-          "version $v matches tag" | Write-Host
+          if ($v -ne $tag) {
+            throw "tag $tag does not match version $v - bump discdig/__init__.py and pyproject.toml first"
+          }
+          "version $v matches tag, and both files agree" | Write-Host
 
       # -SkipNetworkCheck: the packaged smoke test would otherwise reach
       # discmaster and archive.org, making a build fail because someone else's
