@@ -1,0 +1,86 @@
+# Packaging is verified on every change to main, but a *release* is only
+# published when you push a version tag.  Building a 15 MB download on every
+# commit would produce a pile of identically-named artifacts nobody can tell
+# apart, and would make a release something that happens by accident.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Windows bundle
+    runs-on: windows-latest
+    permissions:
+      contents: write # needed only by the release step, on tags
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Create the environment
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install -e .
+
+      - name: Check the tag matches discdig.__version__
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path discdig/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          if ($v -ne $tag) {
+            throw "tag $tag does not match __version__ $v - bump discdig/__init__.py first"
+          }
+          "version $v matches tag" | Write-Host
+
+      # -SkipNetworkCheck: the packaged smoke test would otherwise reach
+      # discmaster and archive.org, making a build fail because someone else's
+      # server is having a bad day.  The local half still gates the zip.
+      - name: Build
+        shell: pwsh
+        run: .\build_windows.ps1 -Clean -SkipNetworkCheck
+
+      # Informational only: proves TLS works in the bundle on a clean machine,
+      # without letting a third-party outage turn the build red.
+      - name: Reach the real sites (non-blocking)
+        continue-on-error: true
+        shell: pwsh
+        run: .\dist\discdig\discdig.exe check
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: discdig-windows-x64
+          path: dist/*.zip
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Publish a release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
+          body: |
+            **Windows, no Python needed.** Download the zip, extract it
+            anywhere, and run `discdig.exe`.
+
+            If anything looks wrong, `discdig.exe check` verifies the build on
+            your machine. Windows may show a SmartScreen warning the first time
+            because the build is unsigned — *More info → Run anyway*.

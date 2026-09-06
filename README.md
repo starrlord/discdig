@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="#download">Download</a> ·
   <a href="#screenshots">Screenshots</a> ·
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
@@ -21,9 +22,11 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/starrlord/discdig/actions/workflows/build.yml"><img alt="build" src="https://github.com/starrlord/discdig/actions/workflows/build.yml/badge.svg"></a>
+  <a href="https://github.com/starrlord/discdig/actions/workflows/live-tests.yml"><img alt="live tests" src="https://github.com/starrlord/discdig/actions/workflows/live-tests.yml/badge.svg"></a>
+  <a href="https://github.com/starrlord/discdig/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/starrlord/discdig?color=ffb454&label=download"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776ab">
-  <img alt="Built with Textual" src="https://img.shields.io/badge/built%20with-Textual-5ccfe6">
-  <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-ffb454">
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-ffb454"></a>
 </p>
 
 ---
@@ -63,6 +66,32 @@ looking.
 
 <sub>Click any shot for the full-size version.</sub>
 
+## Download
+
+**Windows, no Python needed.** Grab `discdig-<version>-windows-x64.zip` from the
+[releases page](https://github.com/starrlord/discdig/releases), extract it wherever you
+like, and run `discdig.exe`. About 15 MB zipped, 28 MB extracted.
+
+```
+discdig\
+├─ discdig.exe        ← run this
+├─ _internal\         ← keep it next to the exe
+├─ LICENSE
+└─ README.txt
+```
+
+Nothing is installed and nothing touches the registry; delete the folder to
+remove it. Settings and the queue live in `%USERPROFILE%\.discdig`, and
+downloads default to `%USERPROFILE%\Downloads\discmaster`.
+
+If anything looks wrong, `discdig.exe check` verifies the build on your machine —
+files, stylesheet, disk access and HTTPS to both sites.
+
+> Windows may show a SmartScreen warning the first time, because the build is
+> unsigned. *More info → Run anyway*, or build it yourself with the script below.
+
+To run from source instead — on any platform — carry on to Install.
+
 ## Install
 
 Needs **Python 3.10+**. [`uv`](https://docs.astral.sh/uv/) is the quickest route,
@@ -72,7 +101,7 @@ but plain `venv` works just as well.
 <summary><b>Windows — PowerShell</b></summary>
 
 ```powershell
-git clone https://github.com/you/discdig.git
+git clone https://github.com/starrlord/discdig.git
 cd discdig
 
 uv venv --python 3.12 .venv
@@ -102,7 +131,7 @@ discdig
 <summary><b>macOS / Linux — bash or zsh</b></summary>
 
 ```bash
-git clone https://github.com/you/discdig.git
+git clone https://github.com/starrlord/discdig.git
 cd discdig
 
 uv venv --python 3.12 .venv
@@ -146,6 +175,7 @@ $ discdig get 21129 Doom2Explosion.bin       # download, no interface
 $ discdig queue                              # what is outstanding
 $ discdig queue --run                        # drain the queue headlessly
 $ discdig config                             # where settings live
+$ discdig check                              # verify the install
 ```
 
 On Windows use `.\discdig.cmd` in place of `discdig` unless the venv is on your
@@ -244,8 +274,9 @@ Settings (`,`) switch that to `<itemid>/…` or to flat filenames, and change th
 download directory, how many transfers run at once (one by default), safe
 search, and whether to prefer archive.org.
 
-Themes come from `ctrl+p` → *Change theme*. Pick one and it sticks — Textual's
-built-ins (nord, gruvbox, catppuccin…) alongside discdig's own amber phosphor.
+Themes come from `ctrl+p` → *Change theme*. It starts on Dracula; pick another
+and it sticks — Textual's built-ins (nord, gruvbox, catppuccin, tokyo-night…)
+alongside discdig's own amber-phosphor theme, `discdig`.
 
 State lives in `~/.discdig/` — `config.json` and `queue.db`. Set `DISCDIG_HOME`
 to move it elsewhere.
@@ -267,6 +298,50 @@ canary for changes in DiscMaster's markup:
 ./.venv/bin/python tests/test_downloader_live.py
 ./.venv/bin/python tests/test_ui_live.py
 ./.venv/bin/python tests/snapshot.py
+```
+
+## Building the Windows release
+
+```powershell
+.\build_windows.ps1 -Clean
+```
+
+PyInstaller packs the app in one-folder mode and the script zips the result into
+`dist\`. One folder rather than one file because a single-exe build unpacks
+~28 MB to a temp directory on every launch, which is a noticeable pause on a tool
+you open to type one search into; the folder form starts instantly.
+
+The script refuses to produce a zip unless the packaged `discdig.exe check`
+passes, so a build that is missing its stylesheet or its TLS certificates never
+reaches a release. Use `-SkipNetworkCheck` to keep that gate local-only.
+
+`uv` is used when it is on `PATH`; otherwise PyInstaller is installed into
+`.venv` and invoked directly, so a plain `python -m venv` setup builds too.
+
+### Continuous integration
+
+| Workflow | When | What |
+| --- | --- | --- |
+| `build.yml` | every push and PR to `main` | packs the bundle on a clean Windows runner and uploads it as an artifact (14 days) — so packaging breakage surfaces immediately |
+| `build.yml` | pushing a `v*` tag | the same build, published as a GitHub Release with the zip attached |
+| `live-tests.yml` | Mondays, or on demand | runs the live suites as a canary for changes in DiscMaster's markup |
+
+Releases are deliberate rather than automatic: a tag publishes, a commit does
+not. The tag has to match `discdig.__version__` or the build stops, so a release
+can't ship mislabelled.
+
+The live suites deliberately do **not** run on every push — they talk to the
+real site, and putting that load on a volunteer-run server for every commit
+would be rude, as well as going red whenever the site is briefly slow. Packaging
+in CI skips the network half of the smoke test for the same reason; the full
+check still runs, but cannot fail the build.
+
+To cut a release:
+
+```powershell
+# bump __version__ in discdig/__init__.py first, then
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 ## How it talks to the site

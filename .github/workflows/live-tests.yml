@@ -1,0 +1,49 @@
+# The test suites talk to the real DiscMaster, which is what makes them useful:
+# they notice when the site's markup shifts under the parsers.  That also makes
+# them the wrong thing to run on every push -- it would put avoidable load on a
+# volunteer-run server and go red whenever the site is slow.
+#
+# So they run once a week as a canary, or on demand.
+name: live tests
+
+on:
+  schedule:
+    - cron: "17 7 * * 1" # Mondays, 07:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: Parsers vs. the live site
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Create the environment
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install -e .
+
+      # One at a time, not in parallel: this is somebody else's server.
+      - name: API and parsers
+        run: ./.venv/bin/python tests/test_api_live.py
+
+      - name: Downloader
+        run: ./.venv/bin/python tests/test_downloader_live.py
+
+      - name: Interface
+        run: ./.venv/bin/python tests/test_ui_live.py
+        env:
+          TERM: xterm-256color

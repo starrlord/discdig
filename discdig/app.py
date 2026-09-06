@@ -38,7 +38,7 @@ from .api import (
 from .downloader import Downloader, destination, safe_component
 from .screens import ConfirmScreen, HelpScreen, InspectScreen, SettingsScreen
 from .store import (
-    DONE, FAILED, PAUSED, QUEUED, RUNNING, Config, Store, Task,
+    DEFAULT_THEME, DONE, FAILED, PAUSED, QUEUED, RUNNING, Config, Store, Task,
 )
 from .widgets import (
     MarkedTable, duration, family_cell, progress_cell, rate, status_cell,
@@ -1486,8 +1486,22 @@ def _status_rank(status: str) -> int:
 # ------------------------------------------------------------------------ app
 
 
+def asset(name: str) -> Path:
+    """Absolute path to a bundled data file, frozen or running from source.
+
+    Textual resolves a relative ``CSS_PATH`` against the module's own file,
+    which does not survive being packed by PyInstaller -- the modules end up
+    inside ``_internal`` while data files are unpacked beside them.  Handing it
+    an absolute path sidesteps the question entirely.
+    """
+    if getattr(sys, "frozen", False):
+        root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        return root / "discdig" / name
+    return Path(__file__).resolve().parent / name
+
+
 class DiscDig(App[None]):
-    CSS_PATH = "discdig.tcss"
+    CSS_PATH = str(asset("discdig.tcss"))
     TITLE = "discdig"
 
     BINDINGS = [
@@ -1545,7 +1559,7 @@ class DiscDig(App[None]):
     async def on_mount(self) -> None:
         self.register_theme(DISCDIG_THEME)
         saved = self.cfg.theme
-        self.theme = saved if saved in self.available_themes else "discdig"
+        self.theme = saved if saved in self.available_themes else DEFAULT_THEME
         if self.theme != saved:
             self.cfg.theme = self.theme   # self-heal a theme that no longer exists
             self.cfg.save()

@@ -14,7 +14,7 @@ os.environ["DISCDIG_HOME"] = str(TMP / "home")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from discdig.app import DiscDig  # noqa: E402
-from discdig.store import Config  # noqa: E402
+from discdig.store import DEFAULT_THEME, Config  # noqa: E402
 
 failures = 0
 LOG = TMP / "results.txt"
@@ -58,7 +58,8 @@ async def main() -> int:
         check("boots into browse", app.active_pane == "browse")
         check("root lists 4 sections", len(browse.rows) == 4,
               str([r.name for r in browse.rows]))
-        check("theme applied", app.theme == "discdig", app.theme)
+        check("starts on the default theme", app.theme == DEFAULT_THEME, app.theme)
+        check("discdig theme still selectable", "discdig" in app.available_themes)
         check("topbar context", "discmaster" in app._context_text, app._context_text)
 
         # --- drill in: section -> genres ------------------------------------
@@ -422,7 +423,7 @@ async def main() -> int:
         check("theme written to config",
               _json.loads(CONFIG_PATH.read_text("utf-8"))["theme"] == "nord",
               _json.loads(CONFIG_PATH.read_text("utf-8"))["theme"])
-        app.theme = "discdig"
+        app.theme = DEFAULT_THEME
         await pilot.pause()
         await asyncio.sleep(0.3)
 

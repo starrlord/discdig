@@ -23,6 +23,11 @@ DB_PATH = APP_DIR / "queue.db"
 QUEUED, RUNNING, PAUSED, DONE, FAILED = "queued", "running", "paused", "done", "failed"
 ACTIVE_STATES = (QUEUED, RUNNING, PAUSED)
 
+#: Theme a fresh install starts on, and the fallback when a saved theme has
+#: gone away.  Defined here rather than in app.py so both the config default
+#: and the app agree without store.py having to import the UI.
+DEFAULT_THEME = "dracula"
+
 
 def _default_download_dir() -> str:
     for candidate in (Path.home() / "Downloads", Path.home()):
@@ -42,7 +47,7 @@ class Config:
     layout: str = "item"
     verify: bool = True
     prefer_archive_org: bool = True
-    theme: str = "discdig"
+    theme: str = DEFAULT_THEME
     confirm_over_bytes: int = 2 * 1024**3
     max_attempts: int = 4
     recurse_limit: int = 2000
