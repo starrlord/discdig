@@ -413,6 +413,34 @@ async def main() -> int:
         await pilot.press("escape")
         await pilot.pause()
 
+        # --- bar colours come from the theme, not hard-coded names ---------------------------
+        from discdig.widgets import progress_cell
+        from discdig.store import Task as _Task, RUNNING as _RUNNING
+        dracula_ramp = app.palette.ramp
+        check("palette derived from the theme",
+              dracula_ramp[0] != dracula_ramp[-1], f"{dracula_ramp[0]}..{dracula_ramp[-1]}")
+        cell = progress_cell(_Task(name="x", status=_RUNNING, downloaded=60, total=100),
+                             24, app.palette)
+        shades = {str(sp.style) for sp in cell.spans}
+        check("bar is a gradient, not one flat colour", len(shades) > 4, str(len(shades)))
+        check("bar uses theme colours",
+              app.palette.ramp[-1].lower() in {c.lower() for c in
+                                               [app.palette.ramp[-1]]},
+              app.palette.ramp[-1])
+        app.theme = "gruvbox"
+        await pilot.pause()
+        await asyncio.sleep(0.4)
+        check("palette follows a theme change", app.palette.ramp[-1] != dracula_ramp[-1],
+              f"{dracula_ramp[-1]} -> {app.palette.ramp[-1]}")
+        app.theme = DEFAULT_THEME
+        await pilot.pause()
+        await asyncio.sleep(0.4)
+        idle = app.bar_phase
+        await asyncio.sleep(0.6)
+        await pilot.pause()
+        check("animation is idle when nothing downloads", app.bar_phase == idle,
+              f"{idle} -> {app.bar_phase}")
+
         # --- theme choice is remembered -------------------------------------------------------
         from discdig.store import CONFIG_PATH
         import json as _json

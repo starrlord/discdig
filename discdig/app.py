@@ -27,6 +27,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.reactive import reactive
 from textual.suggester import SuggestFromList
+from textual.color import Gradient
 from textual.theme import Theme
 from textual.widgets import (
     Checkbox, Footer, Input, Label, ProgressBar, Select, Static,
@@ -41,7 +42,7 @@ from .store import (
     DEFAULT_THEME, DONE, FAILED, PAUSED, QUEUED, RUNNING, Config, Store, Task,
 )
 from .widgets import (
-    MarkedTable, duration, family_cell, progress_cell, rate, status_cell,
+    BarPalette, MarkedTable, duration, family_cell, progress_cell, rate, status_cell,
 )
 
 DISCDIG_THEME = Theme(
@@ -1343,13 +1344,14 @@ class QueuePane(Pane):
         self.fit_columns()
         cols = list(self.table.columns.values()) if self.maybe_table() else []
         bar_width = max(6, (cols[2].width if len(cols) > 2 else 20) - 6)
+        palette = self.dig.palette
         tasks = sorted(dl.tasks.values(), key=lambda t: (_status_rank(t.status), -t.id))
         self.rows = [
             Row(
                 key=f"t:{t.id}", name=t.name, family=t.family or "other",
-                lead=status_cell(t),
+                lead=status_cell(t, palette),
                 cells=(
-                    progress_cell(t, bar_width),
+                    progress_cell(t, bar_width, palette, self.dig.bar_phase),
                     human_size(t.total or t.expected_size),
                     rate(t.speed),
                     duration(t.eta),
@@ -1532,6 +1534,9 @@ class DiscDig(App[None]):
         self.start_query = query
         self.start_goto = goto
         self.items: dict[int, tuple[str, str]] = {}  # itemid -> (title, ia identifier)
+        self.palette = BarPalette.from_theme(DISCDIG_THEME)
+        #: Advances while transfers run, driving the indeterminate bar.
+        self.bar_phase = 0
         self._dirty = False
         self._context_text = ""
 
@@ -1567,10 +1572,11 @@ class DiscDig(App[None]):
         # Registered as an extra watcher rather than a watch_theme method so we
         # never shadow Textual's own handling of the reactive.
         self.watch(self, "theme", self._remember_theme, init=False)
+        self.rebuild_palette()
         self.dl.load()
         await self.dl.start()
         self.show_pane(self.active_pane)
-        self.set_interval(0.25, self._tick)
+        self.set_interval(0.1, self._tick)
         if self.start_goto:
             self.browse.goto(*self.start_goto)
             self.show_pane("browse")
@@ -1637,6 +1643,24 @@ class DiscDig(App[None]):
         if theme and theme != self.cfg.theme:
             self.cfg.theme = theme
             self.cfg.save()
+        self.rebuild_palette()
+
+    def rebuild_palette(self) -> None:
+        """Re-derive the bar colours from whatever theme is now active."""
+        try:
+            self.palette = BarPalette.from_theme(self.current_theme)
+        except Exception:  # noqa: BLE001 - never let a theme break the UI
+            return
+        bars = self.query("#q-bar")
+        if bars:
+            bar = bars.first(ProgressBar)
+            bar.gradient = Gradient.from_colors(
+                self.palette.ramp[0], self.palette.ramp[len(self.palette.ramp) // 2],
+                self.palette.ramp[-1],
+            )
+            bar.refresh()
+        if self.is_running and self.active_pane == "queue":
+            self.queue.refresh_queue()
 
     def set_context(self, text: str) -> None:
         self._context_text = text
@@ -1671,6 +1695,10 @@ class DiscDig(App[None]):
         pane = self.maybe_pane(self.active_pane)
         if pane is not None:
             pane.reflow_if_resized()
+        # The phase only advances while a transfer is live, so an idle queue
+        # costs nothing and a keypress is never waiting on an animation frame.
+        if self.dl.progress().active:
+            self.bar_phase += 1
         if self._dirty:
             self._dirty = False
             if self.active_pane == "queue":
