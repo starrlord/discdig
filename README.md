@@ -48,7 +48,7 @@ looking.
     </td>
     <td width="33%" align="center">
       <a href="assets/screen1.png">
-        <img src="assets/screen1.png" alt="The browse pane listing CD-ROM genres with a disc count against each">
+        <img src="assets/screen1.png" alt="The browse pane on the Dracula theme, listing CD-ROM genres alphabetically with a disc count against each">
       </a>
     </td>
     <td width="33%" align="center">
