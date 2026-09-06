@@ -1,0 +1,61 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Packaging ------------------------------------------------------------
+build/
+dist/
+*.egg-info/
+.eggs/
+MANIFEST
+# uv.lock IS committed: discdig is an application, so the pinned set is part
+# of the source, not a build artefact.
+
+# --- Virtual environments -------------------------------------------------
+# uv drops a self-ignoring .gitignore inside .venv, but `python -m venv`
+# does not, so name them here too.
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# --- Tooling caches -------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- Editors and OS -------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- discdig runtime state ------------------------------------------------
+# Settings and the download queue normally live in ~/.discdig, but DISCDIG_HOME
+# can point anywhere -- including here -- so keep that state out of the repo.
+.discdig/
+config.json
+queue.db
+queue.db-wal
+queue.db-shm
+
+# Interrupted downloads, in case a download directory is set inside the tree.
+*.part
+
+# Scratch space
+/downloads/
+/tmp/
+*.log
