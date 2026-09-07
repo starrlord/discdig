@@ -14,6 +14,7 @@ os.environ["DISCDIG_HOME"] = str(TMP / "home")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from discdig.app import DiscDig  # noqa: E402
+from discdig.api import quote_path as _quote_path  # noqa: E402
 from discdig.store import DEFAULT_THEME, Config  # noqa: E402
 
 failures = 0
@@ -419,6 +420,42 @@ async def main() -> int:
         q = app.queue
         check("queue renders rows", len(q.rows) >= 1, str(len(q.rows)))
 
+        # 'o' works on a browse or search row; it has to work on a queue row too
+        import discdig.app as _app
+        qopened: list[str] = []
+        real_app_open = _app.webbrowser.open
+        _app.webbrowser.open = lambda url, *a, **k: qopened.append(url)
+        try:
+            q.table.focus()
+            q.table.move_cursor(row=0)
+            await pilot.pause()
+            await pilot.press("o")
+            await pilot.pause()
+            qtask = next(iter(app.dl.tasks.values()))
+            check("o on a queue row opens the file's page",
+                  qopened == [f"https://discmaster.textfiles.com/view/{qtask.itemid}/"
+                              + _quote_path(qtask.fileid)],
+                  str(qopened))
+            # a search bundle has no page, and must not open a nonsense URL
+            qopened.clear()
+            from discdig.store import Task as _T
+            app.dl.tasks[9999] = _T(id=9999, itemid=0, fileid="bundle:https://x/y",
+                                    name="bundle.tar.gz", item_name="search bundle")
+            q.refresh_queue()
+            await pilot.pause()
+            bundle_row = next(i for i, r in enumerate(q.visible_rows)
+                              if r.task_id == 9999)
+            q.table.move_cursor(row=bundle_row)
+            await pilot.pause()
+            await pilot.press("o")
+            await pilot.pause()
+            check("o on a bundle row opens nothing", qopened == [], str(qopened))
+            del app.dl.tasks[9999]
+            q.refresh_queue()
+            await pilot.pause()
+        finally:
+            _app.webbrowser.open = real_app_open
+
         # the queue's filter box was equally unwired
         await pilot.press("slash")
         await pilot.pause()
@@ -481,6 +518,21 @@ async def main() -> int:
         await pilot.pause()
         check("settings opens", app.screen.__class__.__name__ == "SettingsScreen",
               app.screen.__class__.__name__)
+        moved = str(TMP / "moved-downloads")
+        path_box = app.screen.query_one("#download_dir")
+        path_box.focus()
+        path_box.value = moved
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        check("enter in the settings path box saves and closes",
+              app.screen.__class__.__name__ != "SettingsScreen",
+              app.screen.__class__.__name__)
+        check("the new download dir was written", Config.load().download_dir == moved,
+              Config.load().download_dir)
+        app.cfg = Config.load()
+        await pilot.press("comma")
+        await pilot.pause()
         await pilot.press("escape")
         await pilot.pause()
 

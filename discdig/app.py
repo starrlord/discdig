@@ -1399,6 +1399,7 @@ class QueuePane(Pane):
         Binding("x", "cancel", "cancel", show=True),
         Binding("r", "retry", "retry", show=True),
         Binding("C", "clear", "clear done", show=True),
+        Binding("o", "open_web", "web", show=False),
         Binding("plus,equals_sign", "more", "+worker", show=False),
         Binding("minus", "fewer", "-worker", show=False),
         Binding("O", "open_folder", "folder", show=True),
@@ -1546,6 +1547,27 @@ class QueuePane(Pane):
         self.table.clear_marks()
         self.dig.notify(f"removed {len(ids)}")
         self.refresh_queue(keep_cursor=True)
+
+    def action_open_web(self) -> None:
+        """Open the discmaster page for the file this row is fetching.
+
+        The help lists "o" among the things that work on a row and every queue
+        row names a real file, but the binding only ever existed on browse and
+        search, so the key died here.  A queue row is always a file in transit
+        rather than something you descended into, so it goes to the file's own
+        /view/ page even for archives.  A search bundle has no page: the server
+        builds it on demand and it carries itemid 0.
+        """
+        row = self.current()
+        task = self.dig.dl.tasks.get(row.task_id) if row else None
+        if task is None:
+            return
+        if not task.itemid:
+            self.dig.notify("a search bundle has no page on discmaster")
+            return
+        webbrowser.open(Entry(itemid=task.itemid, fileid=task.fileid,
+                              name=task.name, family=task.family).view_url())
+        self.dig.notify("opened in your browser")
 
     def action_retry(self) -> None:
         n = self.dig.dl.retry_failed()

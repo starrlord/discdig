@@ -232,9 +232,9 @@ and picks up where it left off.
 | `space` `ctrl+a` `escape` | mark / mark all / clear |
 | `d` `a` `R` | queue selection / whole listing / recursively |
 | `s` `S` | sort by the next column / reverse — or click a header |
-| `/` | browse: filter rows on screen · search: jump to the query box |
+| `/` | browse and queue: filter the rows on screen · search: jump to the query box (`\` filters there) |
 | `m` `ctrl+t` | search: files ⇄ whole discs |
-| `ctrl+n` | start over in this pane — browse: back to the root · search: clear the query, filters and sort |
+| `ctrl+n` | start over — browse: back to the root · search: clear the query, filters and sort |
 | `B` | fetch all search matches as one `.tar.gz` |
 | `i` `o` | detail panel · open in a web browser |
 | `p` `P` `x` `r` `C` `+` `-` | queue: pause, pause all, cancel, retry, clear, more/fewer |

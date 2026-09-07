@@ -36,7 +36,7 @@ HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         ("enter / l", "open — descend, or jump to a search hit's folder"),
         ("backspace / h", "go up one level"),
         ("", "  (backing out of a search cross-link returns to your results)"),
-        ("ctrl+n", "start over in this pane — browse climbs back to the root"),
+        ("ctrl+n", "browse and search: start over — browse climbs to the root"),
         ("/", "filter the rows on screen"),
         ("s", "sort by the next column (click a header does the same)"),
         ("S", "reverse the sort"),
@@ -182,6 +182,17 @@ class SettingsScreen(ModalScreen[Config | None]):
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Save", variant="primary", id="save")
+
+    @on(Input.Submitted, "#download_dir")
+    def _path_submitted(self) -> None:
+        """Enter in the path box saves, rather than doing nothing at all.
+
+        It was the only Input left in the app whose Submitted went unhandled,
+        so the obvious gesture -- type a folder, press enter -- silently threw
+        the edit away and left the dialog sitting there.  Enter already means
+        "the primary button" in ConfirmScreen; it means the same here.
+        """
+        self.action_save()
 
     @on(Button.Pressed, "#save")
     def action_save(self) -> None:
