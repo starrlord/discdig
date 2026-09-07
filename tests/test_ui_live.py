@@ -85,6 +85,31 @@ async def main() -> int:
         await pilot.pause()
         check("escape clears filter", len(browse.visible_rows) == len(browse.rows))
 
+        # ... and the same thing driven through the box the reader actually types in
+        await pilot.press("slash")
+        await pilot.pause()
+        box = browse.query("Input.filter").first()
+        check("slash opens the filter box", box.display and box.has_focus,
+              f"display={box.display} focus={box.has_focus}")
+        await pilot.press("C", "a", "l", "e", "n")
+        await pilot.pause()
+        check("typing in the box narrows the rows",
+              1 <= len(browse.visible_rows) <= 3,
+              str([r.name for r in browse.visible_rows]))
+        check("the keys went into the box, not the table", box.value == "Calen",
+              repr(box.value))
+        await pilot.press("enter")
+        await pilot.pause()
+        check("enter hands focus back to the table",
+              app.focused is browse.table, str(app.focused.id if app.focused else None))
+        check("enter keeps the filter applied", 1 <= len(browse.visible_rows) <= 3,
+              str([r.name for r in browse.visible_rows]))
+        await pilot.press("escape")
+        await pilot.pause()
+        check("escape clears the typed filter",
+              len(browse.visible_rows) == len(browse.rows) and not box.display,
+              f"{len(browse.visible_rows)}/{len(browse.rows)} display={box.display}")
+
         # --- genre -> items ---------------------------------------------------
         browse.filter_text = "Calendar"
         await pilot.pause()
@@ -393,6 +418,20 @@ async def main() -> int:
               app._context_text.startswith("queue:"), app._context_text)
         q = app.queue
         check("queue renders rows", len(q.rows) >= 1, str(len(q.rows)))
+
+        # the queue's filter box was equally unwired
+        await pilot.press("slash")
+        await pilot.pause()
+        qbox = q.query("Input.filter").first()
+        await pilot.press("z", "z", "z")
+        await pilot.pause()
+        check("queue filter box narrows too",
+              qbox.value == "zzz" and len(q.visible_rows) == 0,
+              f"{qbox.value!r} -> {len(q.visible_rows)} rows")
+        await pilot.press("escape")
+        await pilot.pause()
+        check("escape restores the queue rows", len(q.visible_rows) == len(q.rows),
+              f"{len(q.visible_rows)}/{len(q.rows)}")
         head = str(app.query_one("#q-counts").content)
         check("queue header", "done" in head or "active" in head or "waiting" in head, head)
 

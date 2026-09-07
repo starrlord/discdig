@@ -424,6 +424,30 @@ class Pane(Vertical):
         if self.is_mounted:
             self.render_rows()
 
+    @on(Input.Changed, "Input.filter")
+    def _row_filter(self, event: Input.Changed) -> None:
+        """Narrow the rows as the reader types.
+
+        This lived on SearchPane, but all three panes compose a filter box and
+        inherit the "/" that opens it -- so in browse and queue you could open
+        the box, type into it, and watch nothing whatsoever happen.
+        """
+        self.filter_text = event.value
+
+    @on(Input.Submitted, "Input.filter")
+    def _row_filter_done(self, event: Input.Submitted) -> None:
+        """Enter commits the filter and hands the keys back to the table.
+
+        Filtering is live, so the rows have already narrowed by the time enter
+        is pressed; what it has to do is move the cursor out of the text field,
+        where j/k/space/d were all being typed as characters.  The box stays on
+        screen as a reminder of what is being hidden -- escape clears it.
+        """
+        event.stop()
+        table = self.maybe_table()
+        if table is not None:
+            table.focus()
+
     # -- actions ----------------------------------------------------------
 
     def action_cursor_down(self) -> None:
@@ -468,9 +492,16 @@ class Pane(Vertical):
         """Empty and hide the row-filter input, if this pane has one."""
         self.filter_text = ""
         filt = self.query("Input.filter")
-        if filt:
-            filt.first(Input).value = ""
-            filt.first(Input).display = False
+        if not filt:
+            return
+        box = filt.first(Input)
+        box.value = ""
+        if box.has_focus:
+            # Hiding the focused widget would strand the keyboard: hand it back.
+            table = self.maybe_table()
+            if table is not None:
+                table.focus()
+        box.display = False
 
     def focus_target(self):
         """Widget that should take focus when this pane is shown."""
@@ -619,7 +650,7 @@ class BrowsePane(Pane):
         loc = self.here
         table = self.table
         table.clear_marks()
-        self.filter_text = ""
+        self.clear_filter_box()
         self.set_busy(True, self.crumb_line())
         try:
             if loc.kind == "root":
@@ -1046,7 +1077,7 @@ class SearchPane(Pane):
         self.total = None
         self.last_filters = {}
         self.rows = []
-        self.filter_text = ""
+        self.clear_filter_box()
         self.table.clear_marks()
         self.label_headers()
         self.render_rows()
@@ -1068,10 +1099,6 @@ class SearchPane(Pane):
     def _filter_submitted(self) -> None:
         self.page = 0
         self.run_search()
-
-    @on(Input.Changed, "Input.filter")
-    def _row_filter(self, event: Input.Changed) -> None:
-        self.filter_text = event.value
 
     def collect(self) -> dict[str, Any]:
         def val(sel: str) -> str:
@@ -1162,7 +1189,7 @@ class SearchPane(Pane):
         table = self.table
         self.set_busy(True, "searching")
         table.clear_marks()
-        self.filter_text = ""
+        self.clear_filter_box()
         started = time.monotonic()
         try:
             page = await self.dig.dm.search(filters, self.page)
@@ -1214,7 +1241,7 @@ class SearchPane(Pane):
         status.update("searching disc titles...")
         self.set_busy(True, "searching discs")
         self.table.clear_marks()
-        self.filter_text = ""
+        self.clear_filter_box()
         started = time.monotonic()
         try:
             found = await asyncio.gather(
