@@ -7,7 +7,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from discdig.api import DiscMaster, human_size, parse_size, quote_path  # noqa: E402
+from discdig.api import (  # noqa: E402
+    DiscMaster, Entry, human_size, parse_listing, parse_size, quote_path,
+)
 
 OK, FAIL = "ok  ", "FAIL"
 failures = 0
@@ -30,6 +32,58 @@ async def main() -> int:
         check("human_size", human_size(604704768) == "577M", human_size(604704768))
         check("human_size G", human_size(1.5 * 1024**3) == "1.5G", human_size(1.5 * 1024**3))
         check("quote space", "%20" not in quote_path("a b/c") or True)
+
+        # --- percent-escapes in hrefs ------------------------------------
+        # Discmaster leaves spaces raw but encodes what would break a URL:
+        # '#' as %23, and a literal '%' in a name as %25.  Decoding both is
+        # what stops quote_path re-encoding "%23" into a 404-producing "%2523".
+        LM = "PC-SIG's World of Utilities (PC-SIG) (1994).iso/UTI/DISK2622.ZIP/LMCOMP"
+        page = (
+            "<title>x</title>"
+            '<a name="text"></a>'
+            f'<a href="/view/10623/{LM.replace("'", "&#039;")}/DISK%231">DISK#1</a>'
+            " data 1 KiB 1994-01-01"
+            '<a href="/view/10623/o2.100%25-100%25-100">o2.100%-100%-100</a>'
+            " data 1 KiB 1997-01-01"
+        )
+        parsed = parse_listing(page, 10623, LM)
+        fileids = [e.fileid for e in parsed.entries]
+        check("href %23 decodes to '#'", f"{LM}/DISK#1" in fileids, str(fileids))
+        sharp_e = next(e for e in parsed.entries if e.fileid.endswith("DISK#1"))
+        check("the apostrophe entity decodes too", "PC-SIG's" in sharp_e.fileid,
+              sharp_e.fileid)
+        check("a '#' path re-encodes to %23, not %2523",
+              sharp_e.view_url().endswith("/DISK%231")
+              and "%2523" not in sharp_e.view_url(),
+              sharp_e.view_url())
+
+        # a name that genuinely contains '%' arrives as %25 and must survive
+        page2 = (
+            "<title>x</title>"
+            '<a name="text"></a>'
+            '<a href="/view/4691/o2.100%25-100%25-100">o2.100%-100%-100</a>'
+            " data 1 KiB 1997-01-01"
+        )
+        pct_list = parse_listing(page2, 4691, "")
+        check("href %25 decodes to a literal '%'",
+              [e.fileid for e in pct_list.entries] == ["o2.100%-100%-100"],
+              str([e.fileid for e in pct_list.entries]))
+        pct = pct_list.entries[0]
+        check("a '%' path re-encodes to %25",
+              pct.view_url().endswith("o2.100%25-100%25-100"), pct.view_url())
+
+        # --- and the same thing end to end against the live site ----------
+        sharp = await dm.browse(10623, LM)
+        hit = next((e for e in sharp.entries if e.name == "DISK#1"), None)
+        check("live: '#' name parsed undecorated",
+              hit is not None and hit.fileid == f"{LM}/DISK#1",
+              repr(hit.fileid) if hit else "not found")
+        if hit:
+            import httpx as _httpx
+            code = _httpx.head(hit.view_url(), follow_redirects=True, timeout=40).status_code
+            check("live: its view URL resolves", code == 200, str(code))
+            code = _httpx.head(hit.file_url(), follow_redirects=True, timeout=40).status_code
+            check("live: its file URL resolves", code == 200, str(code))
 
         # --- browse: item root --------------------------------------------
         lst = await dm.browse(17246)

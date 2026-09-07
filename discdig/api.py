@@ -299,14 +299,15 @@ class DiscMaster:
     @staticmethod
     def _entry_from_json(row: dict[str, Any]) -> Entry:
         # Directory hits carry no "fileid" -- only an href -- so recover the path
-        # from the link.  Discmaster emits hrefs raw (spaces and all), so the
-        # only transform needed is dropping the "/browse/<itemid>/" prefix.
+        # from the link.  The JSON "fileid" is the true path, but "href" is
+        # percent-encoded: a name holding a literal '%' arrives there as "%25".
+        # Decoding is what makes the two agree.
         fileid = row.get("fileid") or ""
         if not fileid:
             href = row.get("href") or ""
             m = re.match(r"/(?:browse|view)/\d+/?(.*)", href, re.S)
             if m:
-                fileid = m.group(1)
+                fileid = urllib.parse.unquote(m.group(1))
         return Entry(
             itemid=int(row.get("itemid", 0)),
             fileid=fileid,
@@ -459,10 +460,14 @@ def parse_listing(page: str, itemid: int, path: str) -> Listing:
             href_item = int(link.group(2))
             if href_item != itemid:
                 continue
-            # hrefs are emitted raw (literal spaces, brackets, parens), so
-            # unescaping entities is the only decoding required -- percent-decoding
-            # here would corrupt any filename that genuinely contains a '%'.
-            fileid = html.unescape(link.group(3) or "")
+            # Discmaster leaves spaces, brackets and parens raw in its hrefs, but
+            # it does percent-encode what would otherwise break the URL: '#'
+            # arrives as "%23", and a filename genuinely containing '%' arrives
+            # as "%25" -- so decoding is safe, and skipping it is not.  Both
+            # layers have to come off, entities first, or the path carries "%23"
+            # around as literal text and quote_path re-encodes it to "%2523",
+            # which 404s on every view, browse and download URL built from it.
+            fileid = urllib.parse.unquote(html.unescape(link.group(3) or ""))
             if not fileid or fileid in seen:
                 continue
             # Only direct children -- video/image sections also link to converted
