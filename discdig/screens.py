@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import webbrowser
 from typing import Any, Callable
 
 from rich.text import Text
@@ -205,12 +206,28 @@ class SettingsScreen(ModalScreen[Config | None]):
 class InspectScreen(ModalScreen[None]):
     """Everything discmaster knows about one file, including detector output."""
 
-    BINDINGS = [Binding("escape,i,q", "dismiss", "close")]
+    BINDINGS = [
+        Binding("escape,i,q", "dismiss", "close"),
+        Binding("o", "open_web", "web"),
+    ]
 
     def __init__(self, entry: Entry, preview: bytes | None = None) -> None:
         super().__init__()
         self.entry = entry
         self.preview = preview
+
+    def action_open_web(self) -> None:
+        """Open this file's page on discmaster.
+
+        The footer has promised this since the screen was written, but the
+        binding was never added, so the key did nothing: a modal screen does
+        not fall through to the browse pane's own ``o`` underneath it.  The
+        screen stays open, matching the footer -- ``o`` is something you do
+        *while* reading the details, not instead of.
+        """
+        e = self.entry
+        webbrowser.open(e.browse_url() if e.is_container else e.view_url())
+        self.app.notify("opened in your browser")
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):

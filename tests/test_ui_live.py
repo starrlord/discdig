@@ -445,6 +445,41 @@ async def main() -> int:
         await pilot.press("escape")
         await pilot.pause()
 
+        # --- the inspector's footer promises 'o'; make sure it delivers ---------------------
+        from discdig import screens as _screens
+        from discdig.api import Entry as _Entry
+        opened: list[str] = []
+        real_open = _screens.webbrowser.open
+        _screens.webbrowser.open = lambda url, *a, **k: opened.append(url)
+        try:
+            png = _Entry(itemid=43230, fileid="CD_Label-MacOS8_for_CHRP.png",
+                         name="CD_Label-MacOS8_for_CHRP.png", family="image")
+            app.push_screen(_screens.InspectScreen(png))
+            await pilot.pause()
+            check("inspector opens", app.screen.__class__.__name__ == "InspectScreen",
+                  app.screen.__class__.__name__)
+            await pilot.press("o")
+            await pilot.pause()
+            check("o opens the file's view page", opened == [png.view_url()], str(opened))
+            check("o leaves the inspector open",
+                  app.screen.__class__.__name__ == "InspectScreen",
+                  app.screen.__class__.__name__)
+            await pilot.press("escape")
+            await pilot.pause()
+
+            folder = _Entry(itemid=43230, fileid="System", name="System",
+                            family="directory")
+            app.push_screen(_screens.InspectScreen(folder))
+            await pilot.pause()
+            await pilot.press("o")
+            await pilot.pause()
+            check("a container opens its browse page",
+                  opened[-1] == folder.browse_url(), str(opened[-1:]))
+            await pilot.press("escape")
+            await pilot.pause()
+        finally:
+            _screens.webbrowser.open = real_open
+
         # --- bar colours come from the theme, not hard-coded names ---------------------------
         from discdig.widgets import progress_cell
         from discdig.store import Task as _Task, RUNNING as _RUNNING
