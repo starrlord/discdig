@@ -324,6 +324,34 @@ async def main() -> int:
         check("plain browse backspace stays in browse",
               app.active_pane == "browse" and len(app.browse.stack) == depth - 1,
               f"{app.active_pane} depth={len(app.browse.stack)}")
+
+        # --- the top bar belongs to whichever pane is on screen ----------------------------
+        await pilot.press("enter")            # back down into a collection
+        await settle(pilot)
+        deep = app.browse.crumb_line()
+        check("browse owns the top bar", app._context_text == deep, app._context_text)
+        await pilot.press("2")
+        await pilot.pause()
+        check("switching to search drops the browse crumb",
+              app._context_text == search.context_line() and app._context_text != deep,
+              app._context_text)
+        await pilot.press("1")
+        await pilot.pause()
+        check("switching back restores the crumb", app._context_text == deep,
+              app._context_text)
+
+        # --- ctrl+n climbs the whole way out of browse -------------------------------------
+        check("deep before the reset", len(app.browse.stack) > 1,
+              str(len(app.browse.stack)))
+        await pilot.press("ctrl+n")
+        await settle(pilot)
+        check("browse reset to root", len(app.browse.stack) == 1,
+              str([loc.kind for loc in app.browse.stack]))
+        check("root listing reloaded", len(app.browse.rows) == 4,
+              str([r.name for r in app.browse.rows]))
+        check("top bar back to discmaster", app._context_text == "discmaster",
+              app._context_text)
+
         await pilot.press("2")
         await pilot.pause()
 
@@ -361,6 +389,8 @@ async def main() -> int:
         await pilot.press("3")
         await pilot.pause()
         check("switched to queue", app.active_pane == "queue")
+        check("queue owns the top bar, not the browse crumb",
+              app._context_text.startswith("queue:"), app._context_text)
         q = app.queue
         check("queue renders rows", len(q.rows) >= 1, str(len(q.rows)))
         head = str(app.query_one("#q-counts").content)
@@ -395,6 +425,8 @@ async def main() -> int:
         await pilot.press("C")
         await pilot.pause()
         check("clear finished", len(app.dl.tasks) == 0, str(len(app.dl.tasks)))
+        check("top bar follows the cleared queue",
+              app._context_text == "queue: empty", app._context_text)
 
         # --- modals -------------------------------------------------------------------------
         await pilot.press("question_mark")

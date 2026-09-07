@@ -35,6 +35,7 @@ HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         ("enter / l", "open — descend, or jump to a search hit's folder"),
         ("backspace / h", "go up one level"),
         ("", "  (backing out of a search cross-link returns to your results)"),
+        ("ctrl+n", "start over in this pane — browse climbs back to the root"),
         ("/", "filter the rows on screen"),
         ("s", "sort by the next column (click a header does the same)"),
         ("S", "reverse the sort"),

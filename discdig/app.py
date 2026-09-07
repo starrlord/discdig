@@ -145,6 +145,28 @@ class Pane(Vertical):
         self.sort_col: int | None = None
         self.sort_desc = False
 
+    # -- the top-bar context slot -----------------------------------------
+
+    def context_line(self) -> str:
+        """What this pane wants shown in the top bar while it is on screen.
+
+        One slot serves all three panes, so each has to be able to say what
+        belongs there; the app re-reads this on every pane switch rather than
+        leaving whichever pane wrote last in possession of the line.
+        """
+        return ""
+
+    def push_context(self, text: str = "") -> None:
+        """Write to the top bar, but only while this pane is the visible one.
+
+        Workers outlive their pane being on screen -- a browse load or a search
+        finishes long after the reader has moved to the queue -- and a line
+        pinned above an unrelated pane is worse than no line at all.  With no
+        argument this restores the pane's own summary.
+        """
+        if self.dig.active_pane == self.id:
+            self.dig.set_context(text or self.context_line())
+
     def set_busy(self, busy: bool, what: str = "") -> None:
         """Show that work is in flight *without* taking the table out of play.
 
@@ -155,7 +177,11 @@ class Pane(Vertical):
         """
         self.busy = busy
         if busy:
-            self.dig.set_context(f"{what} …" if what else "loading …")
+            self.push_context(f"{what} …" if what else "loading …")
+        else:
+            # Put the pane's own line back, so a load that fails cannot leave
+            # "loading …" hanging in the top bar for the rest of the session.
+            self.push_context()
 
     # -- table plumbing ---------------------------------------------------
 
@@ -433,14 +459,18 @@ class Pane(Vertical):
     def action_clear_selection(self) -> None:
         changed = bool(self.table.marked) or bool(self.filter_text)
         self.table.clear_marks()
+        self.clear_filter_box()
+        if changed:
+            self.render_rows(keep_cursor=True)
+        self.table.focus()
+
+    def clear_filter_box(self) -> None:
+        """Empty and hide the row-filter input, if this pane has one."""
         self.filter_text = ""
         filt = self.query("Input.filter")
         if filt:
             filt.first(Input).value = ""
             filt.first(Input).display = False
-        if changed:
-            self.render_rows(keep_cursor=True)
-        self.table.focus()
 
     def focus_target(self):
         """Widget that should take focus when this pane is shown."""
@@ -467,6 +497,7 @@ class BrowsePane(Pane):
     BINDINGS = [
         Binding("backspace,h", "go_up", "up", show=True),
         Binding("l", "descend", "open", show=False),
+        Binding("ctrl+n", "reset_browse", "start over", show=True),
         Binding("d", "queue_selected", "queue", show=True),
         Binding("a", "queue_all", "queue all", show=True),
         Binding("R", "queue_recursive", "recurse", show=True),
@@ -520,6 +551,27 @@ class BrowsePane(Pane):
 
     def action_reload(self) -> None:
         self.load()
+
+    def action_reset_browse(self) -> None:
+        """Climb the whole way out, back to the collection root.
+
+        Backspace unwinds one rung at a time, which is no help nine folders
+        deep inside an ISO, and left this pane sitting on a stale listing after
+        the reader had started over everywhere else.  Same key as the search
+        pane's reset: ^n means "blank slate here" in whichever pane you're in.
+        """
+        if len(self.stack) == 1 and not self.filter_text and not self.table.marked:
+            self.dig.notify("already at the top")
+            return
+        self.stack = [Loc(kind="root", label="discmaster")]
+        self.listing = None
+        self.item_name = ""
+        self.archive_org = ""
+        self.sort_col = None
+        self.sort_desc = False
+        self.clear_filter_box()
+        self.load()
+        self.dig.notify("back to the top")
 
     def action_descend(self) -> None:
         row = self.current()
@@ -604,7 +656,7 @@ class BrowsePane(Pane):
         self.set_headers(kind)
         self.render_rows()
         self.query_one("#crumbs", Static).update(self.crumb_line(markup=True))
-        self.dig.set_context(self.crumb_line())
+        self.push_context()
 
     def _root_rows(self) -> list[Row]:
         blurbs = {
@@ -691,6 +743,9 @@ class BrowsePane(Pane):
         labels = self.HEADERS.get(kind, self.HEADERS["listing"])
         self._base_headers = list(labels)
         self.label_headers()
+
+    def context_line(self) -> str:
+        return self.crumb_line()
 
     def crumb_line(self, markup: bool = False) -> str:
         parts: list[str] = ["discmaster"]
@@ -790,8 +845,13 @@ class SearchPane(Pane):
         self.sort_index = 0
         self.sort_desc = False
         self.last_filters: dict[str, Any] = {}
+        #: Last result summary, kept so the top bar can be rebuilt on demand.
+        self.summary = ""
         #: "files" searches the 1.8bn indexed files; "discs" searches item titles.
         self.mode = "files"
+
+    def context_line(self) -> str:
+        return self.summary or "search"
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="searchbar"):
@@ -991,7 +1051,8 @@ class SearchPane(Pane):
         self.label_headers()
         self.render_rows()
         self.query_one("#search-status", Static).update(self.mode_hint())
-        self.dig.set_context("search")
+        self.summary = ""
+        self.push_context()
         self.dig.notify("cleared - query, filters and sort are back to default")
         self.action_focus_query()
 
@@ -1131,7 +1192,8 @@ class SearchPane(Pane):
                       f"sort {SORTS[self.sort_index][1]} {arrow}{active}")
         self.label_headers()
         self.render_rows()
-        self.dig.set_context(f"search: {filters.get('q') or '(filters)'} — {total}")
+        self.summary = f"search: {filters.get('q') or '(filters)'} — {total}"
+        self.push_context()
         self.table.focus()
 
     async def search_discs(self) -> None:
@@ -1183,7 +1245,8 @@ class SearchPane(Pane):
         status.update(f"{self.total:,} {noun} \u00b7 {took:.0f}ms \u00b7 "
                       "enter opens \u00b7 d queues it \u00b7 ^n starts over")
         self.render_rows()
-        self.dig.set_context(f"discs: {query} \u2014 {self.total:,} found")
+        self.summary = f"discs: {query} \u2014 {self.total:,} found"
+        self.push_context()
         self.table.focus()
 
     def disc_rows(self, items: list[ItemSummary]) -> list[Row]:
@@ -1368,6 +1431,17 @@ class QueuePane(Pane):
         self.render_rows(keep_cursor=keep_cursor)
         self._update_head()
 
+    def context_line(self) -> str:
+        if not self.dig.dl.tasks:
+            return "queue: empty"
+        p = self.dig.dl.progress()
+        bits = [f"{p.active} active", f"{p.queued} waiting", f"{p.done} done"]
+        if p.failed:
+            bits.append(f"{p.failed} failed")
+        if p.paused:
+            bits.append(f"{p.paused} paused")
+        return "queue: " + " · ".join(bits)
+
     def _update_head(self) -> None:
         p = self.dig.dl.progress()
         paused = self.dig.dl.paused_all
@@ -1409,6 +1483,7 @@ class QueuePane(Pane):
             elif task:
                 note = f"[dim]{task.dest}[/dim]"
         self.query_one("#q-note", Static).update(note)
+        self.push_context()
 
     @on(MarkedTable.RowHighlighted)
     def _row_highlighted(self) -> None:
@@ -1619,6 +1694,7 @@ class DiscDig(App[None]):
             self.query_one(f"#{pane}").display = pane == name
             self.query_one(f"#tab-{pane}").set_class(pane == name, "-active")
         widget = self.pane_widget(name)
+        self.refresh_context()
         if name == "queue":
             self.queue.refresh_queue()
         target = widget.focus_target()
@@ -1665,6 +1741,18 @@ class DiscDig(App[None]):
     def set_context(self, text: str) -> None:
         self._context_text = text
         self.query_one("#context", Static).update(Text(text, overflow="ellipsis", no_wrap=True))
+
+    def refresh_context(self) -> None:
+        """Re-read the active pane's own line into the shared top-bar slot.
+
+        One slot serves three panes.  Left to itself it keeps whatever was
+        written last from anywhere in the app, so the queue sat under a browse
+        crumb, a reset search left "search" hanging over a browse listing, and
+        a finished recursive walk pinned its progress line there for good.
+        """
+        pane = self.maybe_pane(self.active_pane)
+        if pane is not None:
+            self.set_context(pane.context_line())
 
     def refresh_topbar(self) -> None:
         p = self.dl.progress()
@@ -1925,7 +2013,9 @@ class DiscDig(App[None]):
                     stack.append(entry.fileid)
                 elif entry.downloadable:
                     found.append(entry)
-            self.set_context(f"walking… {len(found)} files, {len(stack)} folders left")
+            if self.active_pane == "browse":
+                self.set_context(f"walking… {len(found)} files, {len(stack)} folders left")
+        self.refresh_context()
 
         if not found:
             self.notify("nothing to download in there", severity="warning")

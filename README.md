@@ -187,7 +187,8 @@ On Windows use `.\discdig.cmd` in place of `discdig` unless the venv is on your
 
 `cd-rom / disk / ftp / other` → genre → disc → into the ISO → into its folders.
 `enter` descends, `backspace` climbs, and the crumb trail always says where you
-are.
+are. `ctrl+n` climbs the whole way out at once, back to a blank slate — quicker
+than nine backspaces when you are deep inside an ISO and done with it.
 
 Genres are listed alphabetically, discs by title, and the columns are labelled
 for the level you are on. `s` — or a click on a header — sorts by any column, and
@@ -233,7 +234,7 @@ and picks up where it left off.
 | `s` `S` | sort by the next column / reverse — or click a header |
 | `/` | browse: filter rows on screen · search: jump to the query box |
 | `m` `ctrl+t` | search: files ⇄ whole discs |
-| `ctrl+n` | search: clear the query, filters and sort |
+| `ctrl+n` | start over in this pane — browse: back to the root · search: clear the query, filters and sort |
 | `B` | fetch all search matches as one `.tar.gz` |
 | `i` `o` | detail panel · open in a web browser |
 | `p` `P` `x` `r` `C` `+` `-` | queue: pause, pause all, cancel, retry, clear, more/fewer |
